@@ -8,7 +8,7 @@ use reth_node_api::FullNodeComponents;
 use reth_node_ethereum::EthereumNode;
 use serde_json::from_reader;
 use std::{fs::File, path::PathBuf, sync::Arc};
-use superchain_registry::RollupConfig;
+use superchain_registry::{RollupConfig, ROLLUP_CONFIGS};
 use tracing::{debug, info};
 use url::Url;
 
@@ -34,7 +34,7 @@ impl HeraCli {
                     }
                     None => {
                         // try to load the rollup configuration from the registry by chain ID
-                        let Some(cfg) = RollupConfig::from_l2_chain_id(args.l2_chain_id) else {
+                        let Some(cfg) = ROLLUP_CONFIGS.get(&args.l2_chain_id).cloned() else {
                             bail!("Failed to find l2 config for chain ID {}", args.l2_chain_id);
                         };
                         Arc::new(cfg)
