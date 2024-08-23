@@ -2625,6 +2625,7 @@ dependencies = [
  "reth-exex",
  "reth-node-api",
  "reth-node-ethereum",
+ "serde_json",
  "superchain-registry",
  "tokio",
  "tracing",

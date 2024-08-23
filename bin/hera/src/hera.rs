@@ -1,13 +1,14 @@
 //! Module for the Hera CLI and its subcommands.
 
 use clap::{Args, Parser, Subcommand};
-use eyre::{bail, Result};
+use eyre::{bail, Context, Result};
 use reth::cli::Cli;
 use reth_exex::{ExExContext, ExExEvent};
 use reth_node_api::FullNodeComponents;
 use reth_node_ethereum::EthereumNode;
-use std::{path::PathBuf, sync::Arc};
-use superchain_registry::{RollupConfig, ROLLUP_CONFIGS};
+use serde_json::from_reader;
+use std::{fs::File, path::PathBuf, sync::Arc};
+use superchain_registry::RollupConfig;
 use tracing::{debug, info};
 use url::Url;
 
@@ -25,8 +26,19 @@ impl HeraCli {
     pub fn run(self) -> Result<()> {
         match self.subcmd {
             HeraSubCmd::ExEx(cli) => cli.run(|builder, args| async move {
-                let Some(cfg) = ROLLUP_CONFIGS.get(&args.l2_chain_id).cloned().map(Arc::new) else {
-                    bail!("Rollup configuration not found for L2 chain ID: {}", args.l2_chain_id);
+                let cfg = match &args.l2_config_file {
+                    Some(path) => {
+                        // try to load the rollup configuration from a file
+                        let file = File::open(path).wrap_err("Failed to open l2 config file")?;
+                        Arc::new(from_reader(file).wrap_err("Failed to read l2 config file")?)
+                    }
+                    None => {
+                        // try to load the rollup configuration from the registry by chain ID
+                        let Some(cfg) = RollupConfig::from_l2_chain_id(args.l2_chain_id) else {
+                            bail!("Failed to find l2 config for chain ID {}", args.l2_chain_id);
+                        };
+                        Arc::new(cfg)
+                    }
                 };
 
                 let node = EthereumNode::default();
@@ -66,6 +78,11 @@ pub(crate) struct HeraArgsExt {
     #[clap(long = "hera.l2-chain-id", default_value_t = DEFAULT_L2_CHAIN_ID)]
     pub l2_chain_id: u64,
 
+    /// Path to a custom L2 rollup configuration file
+    /// (overrides the default rollup configuration from the registry)
+    #[clap(long = "hera.l2-config-file")]
+    pub l2_config_file: Option<PathBuf>,
+
     /// RPC URL of an L2 execution client
     #[clap(long = "hera.l2-rpc-url", default_value = DEFAULT_L2_RPC_URL)]
     pub l2_rpc_url: Url,
@@ -91,7 +108,7 @@ pub(crate) struct HeraArgsExt {
     #[clap(
         long = "hera.validation-mode",
         default_value = "trusted",
-        requires_ifs([("engine-api", "l2-engine-api-url"), ("engine-api", "l2-engine-jwt-secret")]),
+        requires_ifs([("engine-api", "l2_engine_api_url"), ("engine-api", "l2_engine_jwt_secret")]),
     )]
     pub validation_mode: ValidationMode,
 
